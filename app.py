@@ -1,198 +1,294 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image
+import pandas as pd
+from PIL import Image, ImageOps, ImageFilter
 import plotly.graph_objects as go
 from ultralytics import YOLO
 import time
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="EcoGuard: Aerial AI",
-    page_icon="🦅",
+    page_title="EcoGuard Command Center",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- 2. ULTRA-MODERN CSS (THE UI UPGRADE) ---
+# --- 2. HIGH-VISIBILITY CSS (ECO-BRIGHT THEME) ---
 st.markdown("""
     <style>
-    /* 1. Animated 'Sunset Savannah' Background */
-    @keyframes gradient {
-        0% {background-position: 0% 50%;}
-        50% {background-position: 100% 50%;}
-        100% {background-position: 0% 50%;}
-    }
-    
+    /* 1. BACKGROUND: Fresh "Aerial Nature" Gradient */
     .stApp {
-        background: linear-gradient(-45deg, #FF512F, #DD2476, #1A2980, #26D0CE);
-        background-size: 400% 400%;
-        animation: gradient 12s ease infinite;
-        font-family: 'Helvetica', sans-serif;
+        background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
+        font-family: 'Segoe UI', Helvetica, sans-serif;
     }
 
-    /* 2. Glassmorphism Containers (Fixes Text Visibility) */
+    /* 2. CRYSTAL GLASS CONTAINERS */
     .glass-container {
-        background: rgba(255, 255, 255, 0.90); /* High opacity white for readability */
-        border-radius: 15px;
-        padding: 25px;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        color: #1A2980; /* Dark blue text for contrast */
-        margin-bottom: 20px;
+        background-color: rgba(255, 255, 255, 0.95); 
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        margin-bottom: 25px;
     }
 
-    /* 3. Metric Cards Styling */
+    /* 3. TEXT COLORS - FORCING DARK TEXT */
+    h1, h2, h3, h4, h5, h6, p, li, div, label {
+        color: #2D3436; /* Dark Charcoal text for perfect contrast */
+    }
+    
+    /* Exceptions for Main Page Title */
+    .main-title {
+        color: #ffffff !important;
+        text-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+        font-weight: 800;
+        font-size: 3rem;
+    }
+    .sub-title {
+        color: #ffffff !important;
+        text-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+    }
+
+    /* 4. METRIC CARDS */
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
+        background: linear-gradient(135deg, #FF9966 0%, #FF5E62 100%);
+        border-radius: 15px;
         padding: 20px;
-        color: white;
+        box-shadow: 0 4px 15px rgba(255, 94, 98, 0.4);
         text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        margin-bottom: 10px;
     }
-    
-    /* 4. Sidebar Customization */
+    .metric-card h2, .metric-card p {
+        color: #ffffff !important; 
+    }
+
+    /* 5. SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
-        background-color: rgba(0, 0, 0, 0.4);
+        background-color: #ffffff;
+        border-right: 1px solid #e0e0e0;
     }
     
-    /* 5. Header Styling */
-    h1, h2, h3 {
-        color: #ffffff;
-        text-shadow: 2px 2px 4px #000000;
-    }
-    
-    /* 6. Custom Button Styling */
+    /* 6. BUTTONS */
     .stButton>button {
-        background: linear-gradient(to right, #11998e, #38ef7d);
-        color: white;
+        background: linear-gradient(to right, #00b09b, #96c93d);
+        color: white !important;
         border: none;
-        border-radius: 30px;
+        border-radius: 12px;
         font-weight: bold;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 15px rgba(56, 239, 125, 0.6);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LOAD MODELS ---
+# --- 3. SESSION STATE ---
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+# --- 4. LOAD MODELS ---
 @st.cache_resource
-def load_classifier():
-    return tf.keras.models.load_model('wildlife_v2_mobilenet.h5')
+def load_models():
+    try:
+        classifier = tf.keras.models.load_model('wildlife_v2_mobilenet.h5')
+        yolo = YOLO('yolov8n.pt') 
+        return classifier, yolo
+    except:
+        return None, None
 
-@st.cache_resource
-def load_yolo():
-    return YOLO('yolov8n.pt') 
+classifier, yolo_model = load_models()
 
-try:
-    classifier = load_classifier()
-    yolo_model = load_yolo()
-except Exception as e:
-    st.markdown('<div class="glass-container"><h3>⚠️ Model Error</h3><p>Please run the training notebook first to generate "wildlife_v2_mobilenet.h5".</p></div>', unsafe_allow_html=True)
-    st.stop()
+# --- 5. INTELLIGENT FEATURES ---
 
-# --- 4. SIDEBAR ---
+def calculate_risk(animal, count):
+    if animal == 'Rhino':
+        return "CRITICAL", "🔴", "High-Value Target. Deploy Ranger Team immediately."
+    elif animal == 'Elephant':
+        return "HIGH", "Hg", "Monitor herd movement. Potential ivory risk."
+    elif animal == 'Buffalo':
+        return "MODERATE", "🟠", "Herd behavior unpredictable."
+    else: # Zebra
+        return "LOW", "🟢", "Standard population monitoring."
+
+def apply_vision_filter(image, filter_type):
+    if filter_type == "Thermal (Simulated)":
+        return ImageOps.colorize(image.convert("L"), black="blue", white="red")
+    elif filter_type == "Night Vision (Green)":
+        return ImageOps.colorize(image.convert("L"), black="black", white="#00ff00")
+    elif filter_type == "Edge Detection":
+        return image.filter(ImageFilter.FIND_EDGES)
+    return image
+
+def generate_report(animal, count, risk, confidence):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    report = f"""
+    ECOGUARD MISSION REPORT
+    -----------------------
+    Date: {timestamp}
+    Status: AUTOMATED SCAN COMPLETE
+    
+    FINDINGS:
+    - Species Detected: {animal.upper()}
+    - Confidence: {confidence*100:.2f}%
+    - Count Estimate: {count}
+    
+    RISK ASSESSMENT:
+    - Threat Level: {risk}
+    
+    Generated by EcoGuard AI.
+    """
+    return report
+
+# --- 6. SIDEBAR CONTROL PANEL ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3069/3069172.png", width=100)
-    st.title("⚙️ Control Panel")
+    st.image("https://cdn-icons-png.flaticon.com/512/3069/3069172.png", width=80)
+    st.title("⚙️ Mission Control")
     st.markdown("---")
-    confidence_threshold = st.slider("🎯 Confidence Threshold", 0.0, 1.0, 0.60)
-    st.info("💡 **Tip:** Use the 'Population Count' tab to detect multiple animals in one frame.")
+    
+    st.subheader("👁️ Vision Filter")
+    vision_mode = st.selectbox("Camera Mode", 
+                               ["Standard RGB", "Thermal (Simulated)", "Night Vision (Green)", "Edge Detection"])
+    
+    st.markdown("---")
+    st.subheader("🎯 Calibration")
+    st.info("Adjust if counting is inaccurate:")
+    conf_thresh = st.slider("Detection Confidence", 0.1, 0.9, 0.25, help="Higher = Stricter. Lower = Looser.")
+    iou_thresh = st.slider("Overlap Threshold", 0.1, 0.9, 0.45, help="Prevents double-counting.")
+    
+    st.markdown("---")
+    st.subheader("📝 Recent Log")
+    if st.session_state.history:
+        for entry in st.session_state.history[-3:]:
+            st.caption(f"• {entry}")
+    else:
+        st.caption("No recent activity.")
 
-# --- 5. MAIN HEADER ---
-st.title("🦅 EcoGuard: Aerial Analytics")
-st.markdown("### 🌍 Autonomous Wildlife Census & Protection System")
+# --- 7. MAIN HEADER ---
+st.markdown('<h1 class="main-title">🛡️ EcoGuard Command Center</h1>', unsafe_allow_html=True)
+st.markdown('<h3 class="sub-title">Autonomous Aerial Surveillance & Threat Analysis</h3>', unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 6. LAYOUT ---
-col1, col2 = st.columns([1, 1.5])
+if classifier is None:
+    st.error("⚠️ System Offline: Model files missing. Please run the training notebook first.")
+    st.stop()
 
+col1, col2 = st.columns([1.2, 1])
+
+# --- LEFT COLUMN: FEED & FILTERS ---
 with col1:
-    st.markdown('<div class="glass-container"><h3>📤 Input Feed</h3><p>Upload drone imagery below.</p></div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("Drop Image Here (JPG/PNG)", type=["jpg", "png", "jpeg"])
+    st.markdown('<div class="glass-container"><h3>📡 Drone Uplink</h3>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Upload Feed", type=['jpg','png','jpeg'], label_visibility='collapsed')
     
     if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Source Feed', use_column_width=True, output_format="JPEG")
+        raw_image = Image.open(uploaded_file)
+        filtered_image = apply_vision_filter(raw_image, vision_mode)
+        st.image(filtered_image, caption=f"Live Feed: {vision_mode}", use_column_width=True)
+        st.caption(f"Sensor Resolution: {raw_image.size} | Mode: {raw_image.mode}")
+    else:
+        st.info("Waiting for drone signal...")
+        st.image("https://cdn-icons-png.flaticon.com/512/2590/2590326.png", width=100) # Placeholder
+    st.markdown('</div>', unsafe_allow_html=True)
 
+# --- RIGHT COLUMN: INTEL & ANALYSIS ---
 if uploaded_file:
     with col2:
-        # We wrap the results in a glass container for perfect visibility
-        st.markdown('<div class="glass-container"><h3>📊 Analysis Dashboard</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="glass-container"><h3>🧠 Tactical Analysis</h3>', unsafe_allow_html=True)
         
-        tab1, tab2 = st.tabs(["🦁 Species Identification", "🔭 Population Count"])
+        # 1. PREDICT SPECIES
+        img_resized = raw_image.resize((224, 224))
+        img_array = np.array(img_resized) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
         
-        # --- TAB 1: CLASSIFICATION ---
-        with tab1:
-            with st.spinner('Processing Neural Network...'):
-                # Resize and Predict
-                img_resized = image.resize((224, 224))
-                img_array = np.array(img_resized) / 255.0
-                img_array = np.expand_dims(img_array, axis=0)
-                
-                predictions = classifier.predict(img_array)
-                classes = ['Buffalo', 'Elephant', 'Rhino', 'Zebra']
-                predicted_class = classes[np.argmax(predictions)]
-                confidence = np.max(predictions)
-            
-            # Result Card
-            st.markdown(f"""
-                <div class="metric-card">
-                    <h2>DETECTED: {predicted_class.upper()}</h2>
-                    <h3>Confidence: {confidence*100:.1f}%</h3>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Plotly Graph with Dark Theme
-            fig = go.Figure(data=[go.Bar(
-                x=classes,
-                y=predictions[0],
-                marker_color=['#FF6B6B', '#4ECDC4', '#FFE66D', '#1A535C']
-            )])
-            fig.update_layout(
-                title='AI Confidence Distribution',
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#1A2980'), # Dark Blue text for visibility on glass
-                height=300,
-                margin=dict(l=20, r=20, t=40, b=20)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # --- TAB 2: COUNTING (YOLO) ---
-        with tab2:
-            st.info("Running YOLOv8 Object Detection...")
-            
-            # YOLO Logic
-            yolo_results = yolo_model.predict(image, conf=0.35) 
-            res_plotted = yolo_results[0].plot()
-            res_image = Image.fromarray(res_plotted[..., ::-1])
-            count = len(yolo_results[0].boxes)
-            
-            st.image(res_image, caption='Object Detection Output', use_column_width=True)
-            
-            st.markdown(f"""
-                <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
-                    <h2>Total Count: {count}</h2>
-                    <p>Animals Detected in Frame</p>
-                </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown('</div>', unsafe_allow_html=True) # End Glass Container
-
-else:
-    # Empty State with Glass Effect
-    with col2:
-        st.markdown("""
-        <div class="glass-container">
-            <h3>Waiting for Data Stream...</h3>
-            <p>Please upload an aerial image from the left panel to begin analysis.</p>
-        </div>
+        predictions = classifier.predict(img_array)
+        classes = ['Buffalo', 'Elephant', 'Rhino', 'Zebra']
+        predicted_class = classes[np.argmax(predictions)]
+        confidence = np.max(predictions)
+        
+        # 2. COUNT & DRAW BOXES (YOLO)
+        yolo_results = yolo_model.predict(raw_image, conf=conf_thresh, iou=iou_thresh, verbose=False)
+        count = len(yolo_results[0].boxes)
+        
+        res_plotted = yolo_results[0].plot()
+        yolo_image = Image.fromarray(res_plotted[..., ::-1])
+        
+        # 3. CALCULATE RISK
+        risk_level, risk_icon, risk_msg = calculate_risk(predicted_class, count)
+        
+        # --- DISPLAY METRICS ---
+        st.markdown(f"""
+            <div class="metric-card">
+                <h2>{predicted_class.upper()}</h2>
+                <p>Confidence: {confidence*100:.1f}%</p>
+            </div>
+            <div style="margin-top: 15px;"></div>
         """, unsafe_allow_html=True)
+        
+        r1, r2 = st.columns(2)
+        with r1:
+             st.markdown(f"""
+            <div class="metric-card" style="background: linear-gradient(135deg, #FF512F 0%, #DD2476 100%);">
+                <h2>{risk_icon} {risk_level}</h2>
+                <p>Threat Level</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with r2:
+             st.markdown(f"""
+            <div class="metric-card" style="background: linear-gradient(135deg, #1A2980 0%, #26D0CE 100%);">
+                <h2>{count}</h2>
+                <p>Head Count</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- [NEW FEATURE] TACTICAL RADAR SCAN ---
+        st.markdown("#### 📊 Tactical Radar Scan")
+        
+        # Prepare data for Radar Chart
+        radar_categories = classes
+        radar_values = predictions[0].tolist()
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatterpolar(
+              r=radar_values,
+              theta=radar_categories,
+              fill='toself',
+              name='Probability',
+              line_color='#00C9FF',
+              fillcolor='rgba(0, 201, 255, 0.3)'
+        ))
+
+        fig.update_layout(
+          polar=dict(
+            radialaxis=dict(visible=True, range=[0, 1]),
+            bgcolor='rgba(255, 255, 255, 0.5)'
+          ),
+          showlegend=False,
+          height=250,
+          margin=dict(l=40, r=40, t=10, b=20),
+          paper_bgcolor='rgba(0,0,0,0)',
+          font=dict(color='#2D3436')
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # --- END NEW FEATURE ---
+        
+        # --- TARGET VERIFICATION ---
+        with st.expander("🎯 Click to Verify Target Grid"):
+            st.image(yolo_image, caption=f"Verified Count: {count} Objects", use_column_width=True)
+            st.info("Boxes indicate confirmed AI detections.")
+        
+        st.markdown(f"**ℹ️ Ranger Protocol:** {risk_msg}")
+        
+        # --- REPORT GENERATION ---
+        report_text = generate_report(predicted_class, count, risk_level, confidence)
+        
+        st.download_button(
+            label="📥 Download Mission Report",
+            data=report_text,
+            file_name=f"mission_report_{int(time.time())}.txt",
+            mime="text/plain"
+        )
+        
+        if f"{predicted_class} ({count})" not in st.session_state.history:
+            st.session_state.history.append(f"{predicted_class} ({count})")
+
+        st.markdown('</div>', unsafe_allow_html=True)
