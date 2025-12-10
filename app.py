@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 from ultralytics import YOLO
 import time
 
-# --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="EcoGuard Command Center",
     page_icon="🛡️",
@@ -15,7 +14,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. HIGH-VISIBILITY CSS (ECO-BRIGHT THEME) ---
 st.markdown("""
     <style>
     /* 1. BACKGROUND: Fresh "Aerial Nature" Gradient */
@@ -80,11 +78,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. SESSION STATE ---
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-# --- 4. LOAD MODELS ---
 @st.cache_resource
 def load_models():
     try:
@@ -96,7 +92,6 @@ def load_models():
 
 classifier, yolo_model = load_models()
 
-# --- 5. INTELLIGENT FEATURES ---
 
 def calculate_risk(animal, count):
     if animal == 'Rhino':
@@ -137,7 +132,6 @@ def generate_report(animal, count, risk, confidence):
     """
     return report
 
-# --- 6. SIDEBAR CONTROL PANEL ---
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/3069/3069172.png", width=80)
     st.title("⚙️ Mission Control")
@@ -161,7 +155,6 @@ with st.sidebar:
     else:
         st.caption("No recent activity.")
 
-# --- 7. MAIN HEADER ---
 st.markdown('<h1 class="main-title">🛡️ EcoGuard Command Center</h1>', unsafe_allow_html=True)
 st.markdown('<h3 class="sub-title">Autonomous Aerial Surveillance & Threat Analysis</h3>', unsafe_allow_html=True)
 st.markdown("---")
@@ -172,7 +165,6 @@ if classifier is None:
 
 col1, col2 = st.columns([1.2, 1])
 
-# --- LEFT COLUMN: FEED & FILTERS ---
 with col1:
     st.markdown('<div class="glass-container"><h3>📡 Drone Uplink</h3>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("Upload Feed", type=['jpg','png','jpeg'], label_visibility='collapsed')
@@ -187,12 +179,10 @@ with col1:
         st.image("https://cdn-icons-png.flaticon.com/512/2590/2590326.png", width=100) # Placeholder
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- RIGHT COLUMN: INTEL & ANALYSIS ---
 if uploaded_file:
     with col2:
         st.markdown('<div class="glass-container"><h3>🧠 Tactical Analysis</h3>', unsafe_allow_html=True)
         
-        # 1. PREDICT SPECIES
         img_resized = raw_image.resize((224, 224))
         img_array = np.array(img_resized) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
@@ -202,17 +192,14 @@ if uploaded_file:
         predicted_class = classes[np.argmax(predictions)]
         confidence = np.max(predictions)
         
-        # 2. COUNT & DRAW BOXES (YOLO)
         yolo_results = yolo_model.predict(raw_image, conf=conf_thresh, iou=iou_thresh, verbose=False)
         count = len(yolo_results[0].boxes)
         
         res_plotted = yolo_results[0].plot()
         yolo_image = Image.fromarray(res_plotted[..., ::-1])
         
-        # 3. CALCULATE RISK
         risk_level, risk_icon, risk_msg = calculate_risk(predicted_class, count)
         
-        # --- DISPLAY METRICS ---
         st.markdown(f"""
             <div class="metric-card">
                 <h2>{predicted_class.upper()}</h2>
@@ -239,10 +226,8 @@ if uploaded_file:
         
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- [NEW FEATURE] TACTICAL RADAR SCAN ---
         st.markdown("#### 📊 Tactical Radar Scan")
         
-        # Prepare data for Radar Chart
         radar_categories = classes
         radar_values = predictions[0].tolist()
         
@@ -269,16 +254,13 @@ if uploaded_file:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # --- END NEW FEATURE ---
         
-        # --- TARGET VERIFICATION ---
         with st.expander("🎯 Click to Verify Target Grid"):
             st.image(yolo_image, caption=f"Verified Count: {count} Objects", use_column_width=True)
             st.info("Boxes indicate confirmed AI detections.")
         
         st.markdown(f"**ℹ️ Ranger Protocol:** {risk_msg}")
         
-        # --- REPORT GENERATION ---
         report_text = generate_report(predicted_class, count, risk_level, confidence)
         
         st.download_button(
